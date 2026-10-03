@@ -26,12 +26,25 @@ const SELF_PING_URL = (process.env.SELF_PING_URL || "").trim();
 const MAX_URLS = Math.max(1, Number(process.env.MAX_URLS) || 50);
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "data");
 
-const URLS_FILE = path.join(DATA_DIR, "urls.json");
-const RESULTS_FILE = path.join(DATA_DIR, "pings.json");
-
 const startedAt = Date.now();
 const log = (...a) => console.log(`[${new Date().toISOString()}]`, ...a);
 const logErr = (...a) => console.error(`[${new Date().toISOString()}]`, ...a);
+
+// active window — automatic pings only run between these times (services sleep at night)
+const TIMEZONE = process.env.TIMEZONE || "Asia/Kolkata";
+function parseHM(value, fallback) {
+  const m = String(value || "").match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!m) {
+    if (value) logErr(`Invalid time "${value}" — expected HH:MM, using ${fallback.label}`);
+    return fallback;
+  }
+  return { h: Number(m[1]), mins: Number(m[1]) * 60 + Number(m[2]), label: m[0] };
+}
+const ACTIVE_FROM = parseHM(process.env.ACTIVE_FROM, { h: 7, mins: 420, label: "07:00" });
+const ACTIVE_TO = parseHM(process.env.ACTIVE_TO, { h: 23, mins: 1380, label: "23:00" });
+
+const URLS_FILE = path.join(DATA_DIR, "urls.json");
+const RESULTS_FILE = path.join(DATA_DIR, "pings.json");
 
 // ---------- authentication ----------
 const AUTH_USER = process.env.AUTH_USER || "Easyskill";
@@ -182,6 +195,37 @@ function makeId() {
     log(`seeded ${added} URL(s) from URLS env`);
   }
 })();
+
+// ---------- active window ----------
+let timeFmt = null;
+try {
+  timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+} catch (e) {
+  logErr(`Invalid TIMEZONE "${TIMEZONE}" (${e.message}) — falling back to server local time`);
+}
+
+function currentMinutes() {
+  if (!timeFmt) {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  }
+  let h = 0;
+  let m = 0;
+  for (const part of timeFmt.formatToParts(new Date())) {
+    if (part.type === "hour") h = Number(part.value);
+    if (part.type === "minute") m = Number(part.value);
+  }
+  return (h % 24) * 60 + m;
+}
+
+function isActiveWindow() {
+  const t = currentMinutes();
+  const from = ACTIVE_FROM.mins;
+  const to = ACTIVE_TO.mins;
+  if (from === to) return true; // same time = 24x7
+  if (from < to) return t >= from && t < to;
+  return t >= from || t < to; // window crosses midnight
+}
 
 // ---------- ping engine ----------
 let totalPings = 0;
@@ -413,6 +457,8 @@ app.get("/api/status", apiLimiter, (req, res) => {
     pinging,
     selfPing: SELF_PING_URL || null,
     dataDir: DATA_DIR,
+    activeWindow: { from: ACTIVE_FROM.label, to: ACTIVE_TO.label, timezone: TIMEZONE },
+    activeNow: isActiveWindow(),
   });
 });
 
@@ -432,13 +478,41 @@ app.use((err, req, res, next) => {
 });
 
 // ---------- start + lifecycle ----------
+let lastCycleRun = 0;
+let windowOpen = isActiveWindow();
+
 const server = app.listen(PORT, () => {
   log(`Always-Awake Keeper → http://localhost:${PORT} (${NODE_ENV})`);
   log(`interval: ${PING_INTERVAL_MIN} min | timeout: ${PING_TIMEOUT_MS}ms | urls: ${urls.length} | data: ${DATA_DIR}`);
+  log(`active window: ${ACTIVE_FROM.label}–${ACTIVE_TO.label} ${TIMEZONE} (${windowOpen ? "ACTIVE" : "PAUSED"})`);
   if (SELF_PING_URL) log(`self ping: ${SELF_PING_URL}`);
-  const run = () => pingAll().catch((e) => logErr("cycle error:", e.message));
-  setTimeout(run, 5000).unref?.();
-  const timer = setInterval(run, PING_INTERVAL_MIN * 60 * 1000);
+
+  if (windowOpen) {
+    setTimeout(() => {
+      lastCycleRun = Date.now();
+      pingAll().catch((e) => logErr("cycle error:", e.message));
+    }, 5000).unref?.();
+  } else {
+    log(`outside active window — automatic pings resume at ${ACTIVE_FROM.label} ${TIMEZONE}`);
+  }
+
+  // tick every minute: watch window state and run due cycles
+  const timer = setInterval(() => {
+    const active = isActiveWindow();
+    if (active !== windowOpen) {
+      windowOpen = active;
+      log(
+        active
+          ? `active window opened — automatic pings resumed (${ACTIVE_FROM.label}–${ACTIVE_TO.label} ${TIMEZONE})`
+          : `active window closed — automatic pings paused until ${ACTIVE_FROM.label} ${TIMEZONE}`
+      );
+    }
+    if (!active) return;
+    if (Date.now() - lastCycleRun >= PING_INTERVAL_MIN * 60000) {
+      lastCycleRun = Date.now();
+      pingAll().catch((e) => logErr("cycle error:", e.message));
+    }
+  }, 60000);
   timer.unref?.();
 });
 

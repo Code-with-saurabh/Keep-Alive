@@ -7,6 +7,7 @@ A lightweight web service that **continuously pings the URLs you provide**, prev
 - 🌐 Web dashboard — add/remove URLs, live status table
 - 🔐 Login-protected dashboard (session cookie, rate-limited attempts)
 - ⏱️ Automatic ping cycle every **5 minutes** (configurable)
+- 🌙 **Active window** — automatic pings only run from **07:00 to 23:00** (configurable); your services sleep at night and are woken again every morning
 - 🔘 Manual **Ping Now** button
 - ✅ Per-URL status: OK/FAIL, HTTP status code, response time, last ping timestamp
 - 💚 Built-in awake endpoints `/ping` and `/health` — your other backends can hit these to keep **this** service awake as well
@@ -43,6 +44,9 @@ copy .env.example .env
 | `PING_INTERVAL_MIN` | `5` | Minutes between ping cycles |
 | `PING_TIMEOUT_MS` | `10000` | Timeout per request |
 | `MAX_URLS` | `50` | Maximum number of URLs allowed |
+| `ACTIVE_FROM` | `07:00` | Automatic pings start at this time (`HH:MM`) |
+| `ACTIVE_TO` | `23:00` | Automatic pings stop at this time — services sleep overnight |
+| `TIMEZONE` | `Asia/Kolkata` | IANA timezone used for the active window (e.g. `UTC`, `America/New_York`) |
 | `URLS` | *(empty)* | Comma-separated seed URLs — **loaded at boot** (safe on ephemeral disks) |
 | `SELF_PING_URL` | *(empty)* | When set, the service pings **itself** on every cycle |
 | `DATA_DIR` | `./data` | Data directory (set to your mount path when using a cloud volume) |
@@ -250,7 +254,8 @@ data/pings.json    → Latest ping results (created at runtime)
 
 ## Notes
 
-- The server sends a **HEAD** request first; if the host returns 405/501 it falls back to **GET**.
+- **Active window:** automatic cycles (including self-ping) run only between `ACTIVE_FROM` and `ACTIVE_TO` in `TIMEZONE` — e.g. 07:00–23:00. Overnight the scheduler is paused, so your services can sleep, and it resumes automatically the next morning. The manual **Ping Now** button and `POST /api/ping` still work at any time. Set both times equal (e.g. `07:00`/`07:00`) to run 24×7. A window crossing midnight (e.g. `22:00`–`06:00`) is supported.
+- Server sends a **HEAD** request first; if the host returns 405/501 it falls back to **GET**.
 - 2xx–3xx = OK, otherwise FAIL (timeouts count as failures).
 - If a cycle is already running, `POST /api/ping` is skipped (cycles never overlap).
 - URLs are file-based — you can stop the server, edit the file, and start again.

@@ -16,6 +16,13 @@ services:
         value: "10000"
       - key: MAX_URLS
         value: "50"
+      # Active window — automatic pings only between these times (services sleep at night)
+      - key: ACTIVE_FROM
+        value: "07:00"
+      - key: ACTIVE_TO
+        value: "23:00"
+      - key: TIMEZONE
+        value: Asia/Kolkata
       # Set after the first deploy (keeps this service awake as well):
       # - key: SELF_PING_URL
       #   value: https://YOUR-KEEPER.onrender.com

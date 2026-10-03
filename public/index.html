@@ -122,7 +122,10 @@ async function load(){
     $("#totalPings").textContent = st.totalPings;
     $("#failures").textContent = st.totalFailures;
     $("#lastCycle").textContent = st.lastCycleAt ? new Date(st.lastCycleAt).toLocaleTimeString() + " (" + st.lastCycleOk + " ok)" : "pending";
-    $("#intervalBadge").textContent = "auto-ping every " + st.intervalMin + " min" + (st.selfPing ? " • self-ping on" : "");
+    const w = st.activeWindow;
+    const windowText = w ? " • active " + w.from + "–" + w.to : "";
+    const pausedText = st.activeNow === false ? " • paused (night)" : "";
+    $("#intervalBadge").textContent = "auto-ping every " + st.intervalMin + " min" + windowText + pausedText + (st.selfPing ? " • self-ping on" : "");
 
     const tb = $("#tbody");
     if(!list.urls.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">No URLs yet — paste one above and click Add.</td></tr>'; return; }
