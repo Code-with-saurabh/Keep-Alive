@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Login — Always Awake Keeper</title>
+<link rel="icon" href="data:," />
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --panel2:#0f1730; --line:#22305c;
+    --txt:#e6ecff; --mut:#8ea2d8; --ok:#22c55e; --bad:#ef4444; --acc:#4f8cff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 600px at 20% -10%,#16224a 0%,var(--bg) 55%);
+    color:var(--txt);font-family:Segoe UI,system-ui,Arial,sans-serif;padding:20px;
+  }
+  .card{
+    width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:30px 26px;box-shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+  h1{font-size:20px;margin:0 0 6px;text-align:center;letter-spacing:.3px}
+  h1 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);margin-right:8px;vertical-align:1px;animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .sub{text-align:center;color:var(--mut);font-size:13px;margin-bottom:22px}
+  label{display:block;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 6px}
+  input{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:12px 14px;border-radius:10px;font-size:15px;outline:none;
+  }
+  input:focus{border-color:var(--acc)}
+  button{
+    width:100%;margin-top:20px;background:var(--acc);color:#fff;border:0;border-radius:10px;
+    padding:13px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;
+  }
+  button:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.6;cursor:default}
+  .err{
+    display:none;margin-top:14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);
+    color:#fca5a5;padding:10px 12px;border-radius:10px;font-size:13px;text-align:center;
+  }
+  .err.show{display:block}
+  .foot{text-align:center;color:var(--mut);font-size:12px;margin-top:18px}
+</style>
+</head>
+<body>
+  <form class="card" id="form" autocomplete="off">
+    <h1><span class="dot"></span>Always Awake Keeper</h1>
+    <div class="sub">Sign in to access the dashboard</div>
+
+    <label for="user">ID</label>
+    <input id="user" name="user" type="text" placeholder="Enter your ID" required />
+
+    <label for="pass">Password</label>
+    <input id="pass" name="pass" type="password" placeholder="Enter your password" required />
+
+    <button id="btn" type="submit">Login</button>
+    <div class="err" id="err"></div>
+    <div class="foot">Protected service — authorized access only</div>
+  </form>
+
+<script>
+const form = document.getElementById("form");
+const btn = document.getElementById("btn");
+const err = document.getElementById("err");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  err.classList.remove("show");
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: document.getElementById("user").value.trim(),
+        pass: document.getElementById("pass").value,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      location.href = "/";
+      return;
+    }
+    err.textContent = j.error || "Login failed — please try again";
+    err.classList.add("show");
+  } catch (ex) {
+    err.textContent = "Network error — please try again";
+    err.classList.add("show");
+  }
+  btn.disabled = false;
+  btn.textContent = "Login";
+});
+</script>
+</body>
+</html>

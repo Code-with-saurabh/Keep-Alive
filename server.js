@@ -3,6 +3,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 // ---------- tiny .env loader (no dependency) ----------
 (function loadEnvFile() {
@@ -31,6 +32,65 @@ const RESULTS_FILE = path.join(DATA_DIR, "pings.json");
 const startedAt = Date.now();
 const log = (...a) => console.log(`[${new Date().toISOString()}]`, ...a);
 const logErr = (...a) => console.error(`[${new Date().toISOString()}]`, ...a);
+
+// ---------- authentication ----------
+const AUTH_USER = process.env.AUTH_USER || "Easyskill";
+const AUTH_PASS = process.env.AUTH_PASS || "Easyskill@2026";
+const AUTH_SESSION_DAYS = Math.max(1, Number(process.env.AUTH_SESSION_DAYS) || 7);
+const COOKIE_NAME = "ka_session";
+
+function getAuthSecret() {
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  const file = path.join(DATA_DIR, "auth-secret.txt");
+  try {
+    if (fs.existsSync(file)) return fs.readFileSync(file, "utf8").trim();
+    const secret = crypto.randomBytes(32).toString("hex");
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(file, secret);
+    return secret;
+  } catch (e) {
+    logErr("auth secret error:", e.message);
+    return crypto.randomBytes(32).toString("hex");
+  }
+}
+const AUTH_SECRET = getAuthSecret();
+
+function hmac(value) {
+  return crypto.createHmac("sha256", AUTH_SECRET).update(String(value)).digest("hex");
+}
+function safeEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function createToken() {
+  const exp = Date.now() + AUTH_SESSION_DAYS * 86400000;
+  return `${exp}.${hmac(exp)}`;
+}
+function verifyToken(token) {
+  if (!token || typeof token !== "string") return false;
+  const dot = token.indexOf(".");
+  if (dot < 1) return false;
+  const exp = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = hmac(exp);
+  if (sig.length !== expected.length) return false;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  return Number(exp) > Date.now();
+}
+function parseCookies(req) {
+  const out = {};
+  const header = req.headers.cookie;
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+function requireAuth(req) {
+  return verifyToken(parseCookies(req)[COOKIE_NAME]);
+}
 
 // ---------- storage ----------
 function loadJSON(file, fallback) {
@@ -203,7 +263,6 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", true);
 app.use(express.json({ limit: "32kb" }));
-app.use(express.static(path.join(__dirname, "public"), { maxAge: NODE_ENV === "production" ? "1h" : 0 }));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -212,6 +271,17 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/api")) res.setHeader("Cache-Control", "no-store");
   next();
 });
+
+// auth gate — everything is protected except login, health and awake endpoints
+const PUBLIC_PATHS = new Set(["/login", "/ping", "/health"]);
+app.use((req, res, next) => {
+  if (PUBLIC_PATHS.has(req.path) || req.path === "/api/login") return next();
+  if (requireAuth(req)) return next();
+  if (req.path.startsWith("/api")) return res.status(401).json({ error: "Authentication required" });
+  res.redirect("/login");
+});
+
+app.use(express.static(path.join(__dirname, "public"), { maxAge: NODE_ENV === "production" ? "1h" : 0 }));
 
 // simple in-memory rate limit per IP
 const buckets = new Map();
@@ -235,6 +305,38 @@ setInterval(() => {
 
 const apiLimiter = rateLimit(120, 60000);
 const mutatorLimiter = rateLimit(20, 60000);
+const loginLimiter = rateLimit(10, 60000);
+
+// ---------- auth routes ----------
+app.get("/login", (req, res) => {
+  if (requireAuth(req)) return res.redirect("/");
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+app.post("/api/login", loginLimiter, (req, res) => {
+  const user = String((req.body && req.body.user) || "");
+  const pass = String((req.body && req.body.pass) || "");
+  const userOk = safeEqual(user, AUTH_USER);
+  const passOk = safeEqual(pass, AUTH_PASS);
+  if (!userOk || !passOk) {
+    logErr("failed login attempt from", req.ip);
+    return res.status(401).json({ error: "Invalid ID or password" });
+  }
+  res.cookie(COOKIE_NAME, createToken(), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: req.secure,
+    maxAge: AUTH_SESSION_DAYS * 86400000,
+    path: "/",
+  });
+  log("login successful:", user, "from", req.ip);
+  res.json({ ok: true });
+});
+
+app.post("/api/logout", (req, res) => {
+  res.clearCookie(COOKIE_NAME, { path: "/" });
+  res.json({ ok: true });
+});
 
 // ---------- API ----------
 app.get("/api/urls", apiLimiter, (req, res) => {

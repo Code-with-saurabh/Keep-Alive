@@ -5,6 +5,7 @@ A lightweight web service that **continuously pings the URLs you provide**, prev
 ## Features
 
 - 🌐 Web dashboard — add/remove URLs, live status table
+- 🔐 Login-protected dashboard (session cookie, rate-limited attempts)
 - ⏱️ Automatic ping cycle every **5 minutes** (configurable)
 - 🔘 Manual **Ping Now** button
 - ✅ Per-URL status: OK/FAIL, HTTP status code, response time, last ping timestamp
@@ -45,6 +46,10 @@ copy .env.example .env
 | `URLS` | *(empty)* | Comma-separated seed URLs — **loaded at boot** (safe on ephemeral disks) |
 | `SELF_PING_URL` | *(empty)* | When set, the service pings **itself** on every cycle |
 | `DATA_DIR` | `./data` | Data directory (set to your mount path when using a cloud volume) |
+| `AUTH_USER` | `Easyskill` | Dashboard login ID |
+| `AUTH_PASS` | `Easyskill@2026` | Dashboard login password |
+| `AUTH_SESSION_DAYS` | `7` | Session lifetime in days |
+| `AUTH_SECRET` | *(auto)* | Secret used to sign session cookies (auto-generated in `data/auth-secret.txt` if not set) |
 
 Example (PowerShell):
 
@@ -54,7 +59,33 @@ $env:PORT="3000"; $env:PING_INTERVAL_MIN="5"; $env:SELF_PING_URL="http://localho
 
 ---
 
-## 3. API Endpoints
+## 3. Access Control (Login)
+
+The dashboard is protected by a login page. Opening `/` without a valid session redirects to `/login`.
+
+- Default credentials: **ID** `Easyskill` / **Password** `Easyskill@2026`
+- Override via the `AUTH_USER` and `AUTH_PASS` environment variables (recommended for production)
+- Login issues an HTTP-only signed session cookie valid for `AUTH_SESSION_DAYS` (default 7 days)
+- Login attempts are rate-limited to 10 per minute per IP
+- `GET /ping` and `GET /health` remain **public** so external schedulers and health checks keep working
+
+### curl example
+
+```bash
+# Login (stores the session cookie in cookie-jar.txt)
+curl -c cookie-jar.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" -d "{\"user\":\"Easyskill\",\"pass\":\"Easyskill@2026\"}"
+
+# Authenticated request
+curl -b cookie-jar.txt http://localhost:3000/api/urls
+
+# Logout
+curl -b cookie-jar.txt -X POST http://localhost:3000/api/logout
+```
+
+---
+
+## 4. API Endpoints
 
 | Method | Route | Description |
 |---|---|---|
@@ -85,7 +116,7 @@ curl http://localhost:3000/ping
 
 ---
 
-## 4. Integrating With Your Project
+## 5. Integrating With Your Project
 
 ### Step A — Register your URLs
 
@@ -153,7 +184,7 @@ threading.Thread(target=keep_awake, daemon=True).start()
 
 ---
 
-## 5. Deploying to a Free Cloud (Production)
+## 6. Deploying to a Free Cloud (Production)
 
 The repository already ships with a `render.yaml` blueprint, `Procfile`, and `.gitignore` — push and connect.
 
@@ -191,7 +222,7 @@ Push the repository to GitHub (`node_modules/`, `data/`, and `.env` are already 
 
 > ⚠️ **Important:** free tiers sleep after inactivity. Once the service sleeps, its own scheduler stops — **self-ping alone cannot wake it**. An **external trigger** is always required:
 >
-> 1. Your other backends call `GET /ping` every 4 minutes (Section 4, Step B) — **mutual keep-awake, the best option**
+> 1. Your other backends call `GET /ping` every 4 minutes (Section 5, Step B) — **mutual keep-awake, the best option**
 > 2. Or use a free scheduler such as [cron-job.org](https://cron-job.org) / UptimeRobot to hit `https://YOUR-KEEPER.onrender.com/ping` every 5 minutes
 >
 > The disk is also **ephemeral** (the `data/` folder is wiped on restart) — storing your URLs in the `URLS` environment variable ensures they are reloaded automatically at boot.
@@ -202,11 +233,12 @@ Same flow: connect the repository → `npm start` → set environment variables 
 
 ---
 
-## 6. Project Structure
+## 7. Project Structure
 
 ```
-server.js          → Express app + ping scheduler + APIs + lifecycle handling
+server.js          → Express app + ping scheduler + APIs + auth + lifecycle handling
 public/index.html  → Web dashboard
+public/login.html  → Login page
 render.yaml        → Render blueprint (one-click deploy)
 Procfile           → Railway/Heroku-style start command
 .env.example       → Environment variable template (copy → .env)

@@ -54,7 +54,10 @@
 <div class="wrap">
   <header>
     <h1><span class="dot"></span>Always Awake Keeper</h1>
-    <div class="badge" id="intervalBadge">loading…</div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div class="badge" id="intervalBadge">loading…</div>
+      <button class="ghost" id="logoutBtn" style="padding:8px 13px;font-size:13px">Logout</button>
+    </div>
   </header>
 
   <div class="stats">
@@ -92,6 +95,11 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+async function jfetch(url, opts){
+  const r = await fetch(url, opts);
+  if(r.status === 401){ location.href = "/login"; throw new Error("Authentication required"); }
+  return r;
+}
 let toastTimer;
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -108,7 +116,7 @@ function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;
 
 async function load(){
   try{
-    const [st, list] = await Promise.all([fetch("/api/status").then(r=>r.json()), fetch("/api/urls").then(r=>r.json())]);
+    const [st, list] = await Promise.all([jfetch("/api/status").then(r=>r.json()), jfetch("/api/urls").then(r=>r.json())]);
     $("#uptime").textContent = fmtUptime(st.uptimeSec);
     $("#tracked").textContent = st.trackedUrls;
     $("#totalPings").textContent = st.totalPings;
@@ -139,7 +147,7 @@ $("#addBtn").addEventListener("click", async ()=>{
   const v = $("#urlInput").value.trim();
   if(!v) return toast("Please enter a URL first");
   try{
-    const r = await fetch("/api/urls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})});
+    const r = await jfetch("/api/urls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})});
     const j = await r.json();
     if(!r.ok) return toast(j.error || "Request failed");
     $("#urlInput").value = ""; toast("URL added successfully"); load();
@@ -152,7 +160,7 @@ $("#pingBtn").addEventListener("click", async ()=>{
   const b = $("#pingBtn"); const old = b.innerHTML;
   b.disabled = true; b.innerHTML = '<span class="spin"></span> Pinging…';
   try{
-    const r = await fetch("/api/ping",{method:"POST"});
+    const r = await jfetch("/api/ping",{method:"POST"});
     const j = await r.json();
     const ok = (j.results||[]).filter(x=>x.ok).length;
     const tot = (j.results||[]).length;
@@ -166,8 +174,13 @@ document.addEventListener("click", async e=>{
   const id = e.target.getAttribute && e.target.getAttribute("data-del");
   if(!id) return;
   if(!confirm("Remove this URL?")) return;
-  await fetch("/api/urls/"+id,{method:"DELETE"});
+  await jfetch("/api/urls/"+id,{method:"DELETE"});
   toast("URL removed successfully"); load();
+});
+
+$("#logoutBtn").addEventListener("click", async ()=>{
+  try{ await fetch("/api/logout",{method:"POST"}); }catch(e){}
+  location.href = "/login";
 });
 
 load();

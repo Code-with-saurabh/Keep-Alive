@@ -22,3 +22,8 @@ services:
       # Seed URLs to keep awake (comma-separated, reloaded at boot):
       # - key: URLS
       #   value: https://your-backend-1.com,https://your-backend-2.com
+      # Dashboard login credentials (defaults are built in — override here if needed):
+      # - key: AUTH_USER
+      #   value: YOUR_ID
+      # - key: AUTH_PASS
+      #   value: YOUR_PASSWORD
