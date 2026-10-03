@@ -74,6 +74,19 @@ function saveAll() {
 let urls = loadJSON(URLS_FILE, []);
 let results = loadJSON(RESULTS_FILE, {});
 
+// sanitize loaded data — corrupt file should never crash the server
+if (!Array.isArray(urls)) {
+  logErr("urls.json corrupt (not an array) — resetting to []");
+  urls = [];
+}
+urls = urls.filter((u) => u && typeof u === "object" && typeof u.url === "string");
+for (const u of urls) if (!u.id) u.id = makeId();
+if (!results || typeof results !== "object" || Array.isArray(results)) {
+  if (results !== undefined && results !== null) logErr("pings.json corrupt — resetting");
+  results = {};
+}
+saveAll();
+
 // ---------- validation ----------
 function isValidUrl(value) {
   if (typeof value !== "string" || value.length > 2048) return false;
@@ -97,7 +110,7 @@ function makeId() {
   let added = 0;
   for (const s of seeds) {
     if (!isValidUrl(s)) {
-      logErr("URLS env me invalid URL skip:", s);
+      logErr("Skipping invalid URL from URLS env:", s);
       continue;
     }
     if (urls.some((u) => u.url === s)) continue;
@@ -211,7 +224,7 @@ function rateLimit(limit, windowMs) {
       b = { start: now, count: 0 };
       buckets.set(ip, b);
     }
-    if (++b.count > limit) return res.status(429).json({ error: "Too many requests — thodi der baad try karo" });
+    if (++b.count > limit) return res.status(429).json({ error: "Too many requests — please try again shortly" });
     next();
   };
 }
@@ -231,9 +244,9 @@ app.get("/api/urls", apiLimiter, (req, res) => {
 app.post("/api/urls", apiLimiter, mutatorLimiter, (req, res) => {
   const raw = String((req.body && req.body.url) || "").trim();
   if (!raw) return res.status(400).json({ error: "url required" });
-  if (!isValidUrl(raw)) return res.status(400).json({ error: "Invalid URL — http:// or https:// ke saath likho" });
+  if (!isValidUrl(raw)) return res.status(400).json({ error: "Invalid URL — it must start with http:// or https://" });
   if (urls.some((u) => u.url === raw)) return res.status(409).json({ error: "URL already exists" });
-  if (urls.length >= MAX_URLS) return res.status(400).json({ error: `Limit reached (${MAX_URLS} URLs). MAX_URLS env se badha sakte ho.` });
+  if (urls.length >= MAX_URLS) return res.status(400).json({ error: `Limit reached (${MAX_URLS} URLs). Increase the MAX_URLS environment variable to add more.` });
 
   const entry = { id: makeId(), url: raw, addedAt: new Date().toISOString() };
   urls.push(entry);
@@ -261,7 +274,7 @@ app.post("/api/ping", apiLimiter, mutatorLimiter, async (req, res) => {
   }
 });
 
-// awake endpoint — aapke baaki backends ise hit karein
+// awake endpoint — your other backends call this to keep this service awake
 app.get("/ping", (req, res) => {
   res.json({
     status: "ok",
@@ -301,7 +314,20 @@ app.get("/api/status", apiLimiter, (req, res) => {
   });
 });
 
-app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
+app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
+
+// JSON error responses for the API (instead of Express' default HTML pages)
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err && err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON body" });
+  }
+  if (err && err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Request body too large" });
+  }
+  logErr("unhandled error:", err && (err.stack || err.message) || err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 // ---------- start + lifecycle ----------
 const server = app.listen(PORT, () => {

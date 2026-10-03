@@ -71,7 +71,7 @@
       <button class="primary" id="addBtn">+ Add URL</button>
       <button class="ghost" id="pingBtn">Ping Now</button>
     </div>
-    <div class="muted" style="margin-top:8px">URL add karo — ye service har few minute uspe request bhejegi taaki wo sleep na ho.</div>
+    <div class="muted" style="margin-top:8px">Add a URL — this service will request it every few minutes to prevent it from sleeping.</div>
   </div>
 
   <div class="card">
@@ -84,7 +84,7 @@
   </div>
 
   <div class="muted" style="margin-top:14px">
-    Aapke baaki backends isko awake rakhne ke liye <code>GET /ping</code> hit karein.
+    Your other backends can call <code>GET /ping</code> to keep this service awake as well.
   </div>
 </div>
 
@@ -117,7 +117,7 @@ async function load(){
     $("#intervalBadge").textContent = "auto-ping every " + st.intervalMin + " min" + (st.selfPing ? " • self-ping on" : "");
 
     const tb = $("#tbody");
-    if(!list.urls.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">Koi URL add nahi hua — upar paste karke Add dabao.</td></tr>'; return; }
+    if(!list.urls.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">No URLs yet — paste one above and click Add.</td></tr>'; return; }
     tb.innerHTML = list.urls.map(u=>{
       const s = u.status;
       const pill = !s ? '<span class="pill none">pending</span>'
@@ -137,12 +137,12 @@ async function load(){
 
 $("#addBtn").addEventListener("click", async ()=>{
   const v = $("#urlInput").value.trim();
-  if(!v) return toast("Pehle URL paste karo");
+  if(!v) return toast("Please enter a URL first");
   try{
     const r = await fetch("/api/urls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})});
     const j = await r.json();
-    if(!r.ok) return toast(j.error || "Error");
-    $("#urlInput").value = ""; toast("URL added"); load();
+    if(!r.ok) return toast(j.error || "Request failed");
+    $("#urlInput").value = ""; toast("URL added successfully"); load();
   }catch(e){ toast(e.message); }
 });
 
@@ -156,7 +156,7 @@ $("#pingBtn").addEventListener("click", async ()=>{
     const j = await r.json();
     const ok = (j.results||[]).filter(x=>x.ok).length;
     const tot = (j.results||[]).length;
-    toast(j.skipped ? "Cycle already running" : ("Ping done: " + ok + "/" + tot + " OK"));
+    toast(j.skipped ? "A ping cycle is already running" : ("Ping cycle complete: " + ok + "/" + tot + " OK"));
     load();
   }catch(e){ toast(e.message); }
   b.disabled = false; b.innerHTML = old;
@@ -165,9 +165,9 @@ $("#pingBtn").addEventListener("click", async ()=>{
 document.addEventListener("click", async e=>{
   const id = e.target.getAttribute && e.target.getAttribute("data-del");
   if(!id) return;
-  if(!confirm("Ye URL delete karna hai?")) return;
+  if(!confirm("Remove this URL?")) return;
   await fetch("/api/urls/"+id,{method:"DELETE"});
-  toast("URL removed"); load();
+  toast("URL removed successfully"); load();
 });
 
 load();

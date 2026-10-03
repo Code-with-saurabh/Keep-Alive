@@ -16,9 +16,9 @@ services:
         value: "10000"
       - key: MAX_URLS
         value: "50"
-      # Deploy ke baad apna URL yahan daalo (taaki ye service khud bhi awake rahe):
+      # Set after the first deploy (keeps this service awake as well):
       # - key: SELF_PING_URL
       #   value: https://YOUR-KEEPER.onrender.com
-      # Exponential disk pe URLs rehne ke liye (comma separated):
+      # Seed URLs to keep awake (comma-separated, reloaded at boot):
       # - key: URLS
       #   value: https://your-backend-1.com,https://your-backend-2.com
