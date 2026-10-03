@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: always-awake-keeper
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PING_INTERVAL_MIN
+        value: "5"
+      - key: PING_TIMEOUT_MS
+        value: "10000"
+      - key: MAX_URLS
+        value: "50"
+      # Deploy ke baad apna URL yahan daalo (taaki ye service khud bhi awake rahe):
+      # - key: SELF_PING_URL
+      #   value: https://YOUR-KEEPER.onrender.com
+      # Exponential disk pe URLs rehne ke liye (comma separated):
+      # - key: URLS
+      #   value: https://your-backend-1.com,https://your-backend-2.com

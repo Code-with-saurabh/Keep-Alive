@@ -1,0 +1,17 @@
+{
+  "name": "always-awake-keeper",
+  "version": "1.0.0",
+  "description": "Paste URLs and this service keeps pinging them periodically so your other web services never sleep/shutdown.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "license": "MIT"
+}

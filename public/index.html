@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Always Awake Keeper</title>
+<link rel="icon" href="data:," />
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --panel2:#0f1730; --line:#22305c;
+    --txt:#e6ecff; --mut:#8ea2d8; --ok:#22c55e; --bad:#ef4444; --acc:#4f8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#16224a 0%,var(--bg) 55%);color:var(--txt);font-family:Segoe UI,system-ui,Arial,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 16px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{font-size:22px;margin:0;letter-spacing:.3px}
+  h1 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);margin-right:8px;animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .badge{background:var(--panel);border:1px solid var(--line);padding:7px 12px;border-radius:10px;font-size:13px;color:var(--mut)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:18px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  input[type=text]{flex:1;min-width:240px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:12px 14px;border-radius:10px;font-size:15px;outline:none}
+  input[type=text]:focus{border-color:var(--acc)}
+  button{cursor:pointer;border:0;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:600;transition:.15s}
+  .primary{background:var(--acc);color:#fff}
+  .primary:hover{filter:brightness(1.1)}
+  .ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+  .ghost:hover{border-color:var(--acc)}
+  .danger{background:transparent;color:#ff8080;border:1px solid #5c2230;padding:7px 11px;font-size:13px}
+  .danger:hover{background:#2a1219}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .stat .k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+  .stat .v{font-size:20px;font-weight:700;margin-top:6px}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+  th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
+  td.url{word-break:break-all;max-width:320px}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+  .ok{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.4)}
+  .fail{background:rgba(239,68,68,.14);color:#fca5a5;border:1px solid rgba(239,68,68,.4)}
+  .none{background:#1b2447;color:var(--mut);border:1px solid var(--line)}
+  .muted{color:var(--mut);font-size:13px}
+  .empty{padding:26px;text-align:center;color:var(--mut)}
+  #toast{position:fixed;right:18px;bottom:18px;background:#0f1730;border:1px solid var(--acc);color:var(--txt);padding:12px 16px;border-radius:10px;font-size:14px;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+  #toast.show{opacity:1;transform:translateY(0)}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #ffffff55;border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  code{background:#0d1430;border:1px solid var(--line);padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span>Always Awake Keeper</h1>
+    <div class="badge" id="intervalBadge">loading…</div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Uptime</div><div class="v" id="uptime">–</div></div>
+    <div class="stat"><div class="k">Tracked URLs</div><div class="v" id="tracked">0</div></div>
+    <div class="stat"><div class="k">Total Pings</div><div class="v" id="totalPings">0</div></div>
+    <div class="stat"><div class="k">Failures</div><div class="v" id="failures">0</div></div>
+    <div class="stat"><div class="k">Last Cycle</div><div class="v" id="lastCycle" style="font-size:14px">–</div></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="urlInput" type="text" placeholder="https://your-service.onrender.com" />
+      <button class="primary" id="addBtn">+ Add URL</button>
+      <button class="ghost" id="pingBtn">Ping Now</button>
+    </div>
+    <div class="muted" style="margin-top:8px">URL add karo — ye service har few minute uspe request bhejegi taaki wo sleep na ho.</div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>URL</th><th>Status</th><th>Code</th><th>Time</th><th>Last Ping</th><th></th></tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="muted" style="margin-top:14px">
+    Aapke baaki backends isko awake rakhne ke liye <code>GET /ping</code> hit karein.
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let toastTimer;
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 2500);
+}
+function fmtUptime(sec){
+  const d=Math.floor(sec/86400), h=Math.floor(sec%86400/3600), m=Math.floor(sec%3600/60), s=sec%60;
+  if(d) return d+"d "+h+"h";
+  if(h) return h+"h "+m+"m";
+  if(m) return m+"m "+s+"s";
+  return s+"s";
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function load(){
+  try{
+    const [st, list] = await Promise.all([fetch("/api/status").then(r=>r.json()), fetch("/api/urls").then(r=>r.json())]);
+    $("#uptime").textContent = fmtUptime(st.uptimeSec);
+    $("#tracked").textContent = st.trackedUrls;
+    $("#totalPings").textContent = st.totalPings;
+    $("#failures").textContent = st.totalFailures;
+    $("#lastCycle").textContent = st.lastCycleAt ? new Date(st.lastCycleAt).toLocaleTimeString() + " (" + st.lastCycleOk + " ok)" : "pending";
+    $("#intervalBadge").textContent = "auto-ping every " + st.intervalMin + " min" + (st.selfPing ? " • self-ping on" : "");
+
+    const tb = $("#tbody");
+    if(!list.urls.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">Koi URL add nahi hua — upar paste karke Add dabao.</td></tr>'; return; }
+    tb.innerHTML = list.urls.map(u=>{
+      const s = u.status;
+      const pill = !s ? '<span class="pill none">pending</span>'
+        : s.lastOk ? '<span class="pill ok">OK</span>'
+        : '<span class="pill fail">FAIL</span>';
+      const code = s ? (s.lastCode || (s.lastError ? "err" : "–")) : "–";
+      const ms = s ? (s.lastMs + " ms") : "–";
+      const at = s ? new Date(s.lastPingAt).toLocaleString() : "–";
+      const extra = s && s.lastError ? '<div class="muted" style="font-size:12px">'+esc(s.lastError)+'</div>' : "";
+      return '<tr><td class="url">'+esc(u.url)+extra+'</td><td>'+pill+'</td><td>'+code+'</td><td>'+ms+'</td><td class="muted">'+at+'</td>'
+        + '<td><button class="danger" data-del="'+u.id+'">Delete</button></td></tr>';
+    }).join("");
+  }catch(e){
+    $("#tbody").innerHTML = '<tr><td colspan="6" class="empty">Load failed: '+esc(e.message)+'</td></tr>';
+  }
+}
+
+$("#addBtn").addEventListener("click", async ()=>{
+  const v = $("#urlInput").value.trim();
+  if(!v) return toast("Pehle URL paste karo");
+  try{
+    const r = await fetch("/api/urls",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})});
+    const j = await r.json();
+    if(!r.ok) return toast(j.error || "Error");
+    $("#urlInput").value = ""; toast("URL added"); load();
+  }catch(e){ toast(e.message); }
+});
+
+$("#urlInput").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#addBtn").click(); });
+
+$("#pingBtn").addEventListener("click", async ()=>{
+  const b = $("#pingBtn"); const old = b.innerHTML;
+  b.disabled = true; b.innerHTML = '<span class="spin"></span> Pinging…';
+  try{
+    const r = await fetch("/api/ping",{method:"POST"});
+    const j = await r.json();
+    const ok = (j.results||[]).filter(x=>x.ok).length;
+    const tot = (j.results||[]).length;
+    toast(j.skipped ? "Cycle already running" : ("Ping done: " + ok + "/" + tot + " OK"));
+    load();
+  }catch(e){ toast(e.message); }
+  b.disabled = false; b.innerHTML = old;
+});
+
+document.addEventListener("click", async e=>{
+  const id = e.target.getAttribute && e.target.getAttribute("data-del");
+  if(!id) return;
+  if(!confirm("Ye URL delete karna hai?")) return;
+  await fetch("/api/urls/"+id,{method:"DELETE"});
+  toast("URL removed"); load();
+});
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>
